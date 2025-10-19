@@ -30,27 +30,36 @@ export default class DataTransformer {
   }
 
 extractLandmark(locationStr) {
-  if (!locationStr || typeof locationStr !== 'string') return 'Unknown';
+    if (!locationStr || typeof locationStr !== 'string' || locationStr.trim() === '0') return 'Unknown';
 
-  // Match patterns like "1.73 km from M/S Suvidha Auto Service, Shahpur"
-  const match = locationStr.match(/^([\d.]+)\s*km\s*from\s+(.+)/i);
-  if (match) {
-    const distance = match[1];
-    let landmark = match[2].trim();
+    const match = locationStr.match(/^([\d.]+)\s*km\s*from\s+(.+)/i);
+    if (match) {
+      const distance = match[1];
+      let landmark = match[2].trim();
 
-    // Normalize common prefixes
-    landmark = landmark
-      .replace(/^(M\/S\.?|Ms\/Hsd)\s*/i, '') // remove M/S, M/S., Ms/Hsd
-      .replace(/\s+/g, ' ')                 // collapse multiple spaces
-      .replace(/\.+$/, '')                  // remove trailing dots
-      .trim();
+      landmark = landmark
+        .replace(/^(M\/S\.?|Ms\/Hsd)\s*/i, '')
+        .replace(/\s+/g, ' ')
+        .replace(/\.+$/, '')
+        .trim();
 
-    return `${landmark} (${distance} km)`;
+      return `${landmark} (${distance} km)`;
+    }
+
+    return locationStr.trim();
   }
 
-  // If no match, return cleaned original
-  return locationStr.trim();
-}
+  transformHeader(header) {
+    return header.trim().replace(/\r/g, '');
+  }
+
+  getField(row, ...keys) {
+    for (let key of keys) {
+      const match = Object.keys(row).find(k => k.trim().replace(/\r/g, '') === key);
+      if (match) return row[match];
+    }
+    return '';
+  }
 
 
   createDerivedColumns(row) {
@@ -60,14 +69,14 @@ extractLandmark(locationStr) {
       ...row,
       DurationMinutes: parseFloat(row['Duration (min)']) || 0,
       RouteDeviationKm: parseFloat(row['Distance']) || 0,
-      LocationName: this.extractLandmark(row['Stoppage location']),
+      LocationName: this.extractLandmark(this.getField(row, 'Stoppage location', 'Stoppage Location', 'Location')),
       Longitude: parseFloat(row['Stoppage Longitude']) || 0,
       Latitude: parseFloat(row['Stoppage Latitude']) || 0,
       AlertType: (() => {
-  const raw = row['Source Sheet Name\r']?.replace(/\r/g, '').trim();
-  if (!raw || !isNaN(raw) || raw === '-' || raw === '') return 'Unknown';
-  return raw.replace(/\s+/g, '_');
-})(),
+                  const raw = row['Source Sheet Name']?.trim();
+                  if (!raw || !isNaN(raw) || raw === '-' || raw === '') return 'Unknown';
+                  return raw.replace(/\s+/g, '_');
+                  })(),
       StartTime: startTime,
       EndTime: endTime,
       TransitTimeMinutes: startTime && endTime ? (endTime - startTime) / (1000 * 60) : 0,
@@ -77,13 +86,28 @@ extractLandmark(locationStr) {
     };
   }
 
-  applyGlobalFilters(data, filters) {
-    return data.filter(row => {
-      const duration = row.DurationMinutes;
-      const deviation = row.RouteDeviationKm;
-      return duration >= filters.minDuration && deviation >= filters.minDeviation;
-    });
-  }
+applyGlobalFilters(data, filters) {
+  return data.filter(row => {
+    const duration = row.DurationMinutes;
+    const deviation = row.RouteDeviationKm;
+    const alertType = row.AlertType;
+
+    const isStoppageViolation = alertType === 'Stoppage_Violation';
+    
+
+    // Must meet duration threshold
+    if (duration < filters.minDuration) return false;
+
+   // Only Stoppage_Violation bypasses deviation filter
+    if (!isStoppageViolation) {
+      return deviation >= filters.minDeviation;
+    }
+
+    // For all other alert types (including Stoppage_Violation), include if duration is valid
+    return true;
+  });
+}
+
 
   getVehicleAlertCounts(data) {
     return _.countBy(data, 'VehicleNumber');
@@ -94,19 +118,86 @@ extractLandmark(locationStr) {
     return data.filter(row => vehicleCounts[row.VehicleNumber] > threshold);
   }
 
+  filterByDateRange(data, rangeType, referenceDate = new Date()) {
+  const ref = new Date(referenceDate);
+  return data.filter(row => {
+    const start = row.StartTime;
+    if (!start) return false;
+
+    switch (rangeType) {
+      case 'daily': {
+        return start.toDateString() === ref.toDateString();
+      }
+      case 'weekly': {
+        const sevenDaysAgo = new Date(ref);
+        sevenDaysAgo.setDate(ref.getDate() - 7);
+        return start >= sevenDaysAgo && start <= ref;
+      }
+      case 'monthly': {
+        return start.getMonth() === ref.getMonth() && start.getFullYear() === ref.getFullYear();
+      }
+      case 'yearly': {
+        return start.getFullYear() === ref.getFullYear();
+      }
+      case 'last7days': {
+        const sevenDaysAgo = new Date(ref);
+        sevenDaysAgo.setDate(ref.getDate() - 7);
+        return start >= sevenDaysAgo && start <= ref;
+      }
+      case 'last30days': {
+        const thirtyDaysAgo = new Date(ref);
+        thirtyDaysAgo.setDate(ref.getDate() - 30);
+        return start >= thirtyDaysAgo && start <= ref;
+      }
+      case 'lastQuarter': {
+        const currentMonth = ref.getMonth();
+        const currentYear = ref.getFullYear();
+        const quarterStartMonth = currentMonth - (currentMonth % 3) - 3;
+        const quarterStart = new Date(currentYear, quarterStartMonth, 1);
+        const quarterEnd = new Date(currentYear, quarterStartMonth + 3, 0, 23, 59, 59);
+        return start >= quarterStart && start <= quarterEnd;
+      }
+      default:
+        return true; // No filtering
+    }
+  });
+}
+
+
   transform(filters) {
+    // Step 1: Initial transformation
     let data = this.rawData.map(row => this.createDerivedColumns(row));
     //console.log('🔧 Derived rows:', data);
+    //console.log('📍 Sample LocationNames:',data.filter(d => d.LocationName && d.LocationName !== 'Unknown' && d.LocationName !== '0')
+    //.slice(0, 100)
+    //.map(d => d.LocationName));
+
+    // Step 2: Apply date range filter if specified
+    if (filters.dateRangeType) {
+      data = this.filterByDateRange(data, filters.dateRangeType, filters.referenceDate);
+      //console.log(`📅 After ${filters.dateRangeType} filter:`, data.length);
+    }
+
+     // Step 3: Apply global filters (duration + deviation logic)
+    //console.log('Before filter:', data,data.length);
     data = this.applyGlobalFilters(data, filters);
-    //console.log('🧹 After global filters:', data);
+    //console.log('🧹 After global filters:', data,data.length);
+
+    // Step 4: Apply alert threshold filter if needed
     if (filters.alertThreshold > 0) {
       data = this.filterByAlertThreshold(data, filters.alertThreshold);
       //console.log('🚨 After alert threshold filter:', data);
     }
+
+    // Step 5: Store transformed data
     this.transformedData = data;
-    console.log('🧪 Sample LocationNames:', data.slice(0, 5).map(d => d.LocationName));
+    //console.log('🧪 Sample LocationNames:', data.slice(0, 5).map(d => d.LocationName));
     //console.log('🧠 Parsed AlertTypes:', _.uniq(data.map(d => d.AlertType)));
-    console.log('🧠 AlertType counts:', _.countBy(data, 'AlertType'));
+    //console.log('🧠 AlertType counts:', _.countBy(data, 'AlertType'));
+    //console.log('📊 Top grouped locations:', _(this.transformedData).countBy('LocationName').toPairs().sort((a, b) => b[1] - a[1]).slice(0, 10));
+    //console.log( '🧭 Stoppage check:', _.countBy(this.transformedData.map(d => d.LocationName),name => name === 'Unknown' ? 'Unknown' : 'Valid'));
+    //console.log('🧮 Sample durations:',this.transformedData.slice(0, 10).map(d => ({LocationName: d.LocationName,DurationMinutes: d.DurationMinutes,VehicleNumber: d.VehicleNumber})));
+    
     return data;
   }
 
@@ -136,7 +227,8 @@ extractLandmark(locationStr) {
         AvgStoppageDuration: _.meanBy(items, 'DurationMinutes'),
         UniqueVehicles: _.uniqBy(items, 'VehicleNumber').length
       }))
-      .orderBy(['TotalStoppageDuration'], ['desc'])
+      .orderBy(['StoppageCount'], ['desc'])
+      //.orderBy(['StoppageCount', 'TotalStoppageDuration'], ['desc', 'desc'])
       .take(limit)
       .value();
   }
@@ -176,12 +268,31 @@ extractLandmark(locationStr) {
   }
 
   getAlertTypeDistribution() {
-  if (!this.transformedData) return [];
+  if (!this.transformedData) {
+    //console.log('⚠️ No transformed data available.');
+    return [];
+  }
 
-  const validZones = ['NOR', 'WES', 'NCL', 'SOU', 'EAS', 'NWL', 'SCL'];
+  // Log all unique alert types
+  const allAlertTypes = _.uniq(this.transformedData.map(d => d.AlertType));
+  //console.log('🔍 Unique AlertTypes:', allAlertTypes);
 
+   // Step 2: Print all unique Zones
+  const uniqueZones = _.uniq(this.transformedData.map(d => d.Zone));
+  //console.log('🌐 Unique Zones:', uniqueZones);
+
+   // Step 3: Count rows per (Zone, AlertType) pair
+  const zoneAlertCounts = _.countBy(this.transformedData, d => `${d.Zone}|||${d.AlertType}`);
+  //console.log('📊 Zone-AlertType Counts:', zoneAlertCounts);
+
+  // Step 4: Sample rows for inspection
+  //console.log('📋 Sample rows with AlertType:',this.transformedData.filter(d => d.AlertType).slice(0, 10).map(d => ({
+        //Zone: d.Zone,AlertType: d.AlertType,VehicleNumber: d.VehicleNumber,DurationMinutes: d.DurationMinutes,RouteDeviationKm: d.RouteDeviationKm
+      //})));
+
+  // Final grouping logic
   const grouped = _(this.transformedData)
-    .filter(item => validZones.includes(item.Zone)) // ✅ Only include known zones
+    .filter(item => item.Zone && item.AlertType)
     .groupBy(item => `${item.Zone}|||${item.AlertType}`) // ✅ Safe delimiter
     .map((items, key) => {
       const [zone, alertType] = key.split('|||');

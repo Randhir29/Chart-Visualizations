@@ -9,16 +9,25 @@ import {
   ZoneKPIs,
   AlertTypeDistribution
 } from './components';
+import ModernDataTable from './components/ModernDataTable';
+import ModernDataTable1 from './components/ModernDataTable1';
 import DataTransformer from './utils/DataTransformer';
+import { createPivot } from './utils/pivotUtils';
+import { applyGlobalFilter } from './utils/filterUtils';
+import { applyRawTableGlobalFilter } from './utils/filterUtils';
 
 export default function App() {
   const [rawData, setRawData] = useState(null);
+  const [globalFilter, setGlobalFilter] = useState('');
   const [filters, setFilters] = useState({
-    minDuration: 0,
-    minDeviation: 0,
-    alertThreshold: 0,
+    minDuration: 15,
+    minDeviation: 0.5,
+    alertThreshold: 1,
     selectedZone: '',
-    availableZones: []
+    availableZones: [],
+    dateRangeType: '',
+    startDate: '',
+    endDate: ''
   });
 
   const transformer = useMemo(() => {
@@ -31,13 +40,23 @@ export default function App() {
     return transformer.transform(filters);
   }, [transformer, filters]);
 
-  const filteredData = useMemo(() => {
+  const zoneFilteredData = useMemo(() => {
     if (!transformedData) return null;
     if (!filters.selectedZone) return transformedData;
     return transformedData.filter(row => row.Zone === filters.selectedZone);
   }, [transformedData, filters.selectedZone]);
 
-  const moduleData = useMemo(() => {
+  const filteredData = useMemo(() => {
+    if (!zoneFilteredData) return null;
+    return applyGlobalFilter(zoneFilteredData, globalFilter);
+  }, [zoneFilteredData, globalFilter]);
+
+  const filteredRawTableData = useMemo(() => {
+  if (!transformedData) return null;
+  return applyRawTableGlobalFilter(transformedData, globalFilter);
+}, [transformedData, globalFilter]);
+
+    const moduleData = useMemo(() => {
     if (!transformer || !filteredData) return null;
     transformer.transformedData = filteredData;
     return {
@@ -48,12 +67,6 @@ export default function App() {
       alertDistribution: transformer.getAlertTypeDistribution()
     };
   }, [transformer, filteredData]);
-
-  //useEffect(() => {
-    //console.log('🔄 Transformed data:', transformedData);
-    //console.log('🔍 Filtered data:', filteredData);
-    //console.log('📊 Module data:', moduleData);
-  //}, [transformedData, filteredData, moduleData]);
 
   useEffect(() => {
     if (rawData) {
@@ -66,7 +79,56 @@ export default function App() {
     setRawData(data);
   };
 
-  if (!rawData) {
+  // Pivot Data
+const routeDeviationStoppageData = useMemo(() =>
+  createPivot(filteredData || [], ['Zone', 'Route No', 'Trip Name'], [
+    { field: 'Duration (min)', type: 'sum', alias: 'TotalDuration' },
+    { field: 'Vehicle Number', type: 'count', alias: 'VehicleCount' }
+  ])
+, [filteredData]);
+
+const stoppageViolationData = useMemo(() =>
+  createPivot(filteredData || [], ['Zone', 'Route No', 'Trip Name', 'Stoppage location'], [
+    { field: 'Duration (min)', type: 'sum', alias: 'TotalStoppageMinutes' },
+    { field: 'Vehicle Number', type: 'count', alias: 'VehicleCount' }
+  ])
+, [filteredData]);
+
+const routeDeviationData = useMemo(() =>
+  createPivot(filteredData || [], ['Zone', 'Route No', 'Trip Name'], [
+    { field: 'Duration (min)', type: 'sum', alias: 'TotalDuration' },
+    { field: 'Distance', type: 'sum', alias: 'TotalDeviationKm' }
+  ])
+, [filteredData]);
+
+
+  // Pivot Columns
+  const routeDeviationStoppageColumns = [
+    { accessorKey: 'Zone', header: 'Zone' },
+    { accessorKey: 'Route No', header: 'Route No' },
+    { accessorKey: 'Trip Name', header: 'Trip Name' },
+    { accessorKey: 'TotalDuration', header: 'Sum of Duration (min)' },
+    { accessorKey: 'VehicleCount', header: 'No. of Vehicles Stoppage' }
+  ];
+
+  const stoppageViolationColumns = [
+    { accessorKey: 'Zone', header: 'Zone' },
+    { accessorKey: 'Route No', header: 'Route No' },
+    { accessorKey: 'Trip Name', header: 'Trip Name' },
+    { accessorKey: 'StoppageLocation', header: 'Stoppage Location' },
+    { accessorKey: 'TotalStoppageMinutes', header: 'Total Stoppage (min)' },
+    { accessorKey: 'VehicleCount', header: 'No. of Vehicles Stoppage' }
+  ];
+
+  const routeDeviationColumns = [
+    { accessorKey: 'Zone', header: 'Zone' },
+    { accessorKey: 'Route No', header: 'Route No' },
+    { accessorKey: 'Trip Name', header: 'Trip Name' },
+    { accessorKey: 'TotalDuration', header: 'Sum of Duration (min)' },
+    { accessorKey: 'TotalDeviationKm', header: 'Sum of Distance (km)' }
+  ];
+
+    if (!rawData) {
     return (
       <div className="min-h-screen bg-gray-50 p-8">
         <div className="max-w-4xl mx-auto text-center">
@@ -95,21 +157,23 @@ export default function App() {
       <main className="max-w-7xl mx-auto px-4 py-6 space-y-6">
         <FilterPanel filters={filters} onChange={setFilters} />
 
+        {/* 🔍 Global Filter */}
+        <div className="bg-white rounded-lg shadow p-4">
+          <input
+            type="text"
+            placeholder="Search across pivot tables..."
+            value={globalFilter}
+            onChange={(e) => setGlobalFilter(e.target.value)}
+            className="w-full px-3 py-2 border rounded mb-4"
+          />
+        </div>
+
         {/* Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <SummaryCard label="Total Records" value={filteredData?.length || 0} />
-          <SummaryCard
-            label="Unique Vehicles"
-            value={_.uniqBy(filteredData || [], 'VehicleNumber').length}
-          />
-          <SummaryCard
-            label="Total Duration"
-            value={`${_.sumBy(filteredData || [], 'DurationMinutes').toFixed(0)} min`}
-          />
-          <SummaryCard
-            label="Avg Deviation"
-            value={`${_.meanBy(filteredData || [], 'RouteDeviationKm').toFixed(2)} km`}
-          />
+          <SummaryCard label="Unique Vehicles" value={_.uniqBy(filteredData || [], 'VehicleNumber').length} />
+          <SummaryCard label="Total Duration" value={`${_.sumBy(filteredData || [], 'DurationMinutes').toFixed(0)} min`} />
+          <SummaryCard label="Avg Deviation" value={`${_.meanBy(filteredData || [], 'RouteDeviationKm').toFixed(2)} km`} />
         </div>
 
         {/* Dashboard Modules */}
@@ -132,6 +196,24 @@ export default function App() {
         <DashboardModule title="Alert Type Distribution by Zone">
           <AlertTypeDistribution data={moduleData?.alertDistribution} />
         </DashboardModule>
+
+        {/* Pivot Tables */}
+        <DashboardModule title="Pivot: RouteDeviationStoppage">
+          <ModernDataTable data={routeDeviationStoppageData} columns={routeDeviationStoppageColumns} />
+        </DashboardModule>
+
+        <DashboardModule title="Pivot: StoppageViolation">
+          <ModernDataTable data={stoppageViolationData} columns={stoppageViolationColumns} />
+        </DashboardModule>
+
+        <DashboardModule title="Pivot: RouteDeviation">
+          <ModernDataTable data={routeDeviationData} columns={routeDeviationColumns} />
+        </DashboardModule>
+
+      <DashboardModule title="Raw Transformed Data">
+        <ModernDataTable1 data={filteredRawTableData || []} />
+      </DashboardModule>
+
       </main>
     </div>
   );

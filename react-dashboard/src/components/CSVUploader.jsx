@@ -1,21 +1,30 @@
 import React, { useState } from 'react';
 import { Upload } from 'lucide-react';
+import Papa from 'papaparse';
 
 const CSVUploader = ({ onDataLoaded }) => {
   const [isDragging, setIsDragging] = useState(false);
 
   const parseCSV = (text) => {
-    const lines = text.trim().split('\n');
-
     // Auto-detect delimiter: tab or comma
-    const delimiter = lines[0].includes('\t') ? '\t' : ',';
-    const headers = lines[0].split(delimiter);
-    const rows = lines.slice(1).map(line => {
-      const cells = line.split(delimiter);
-      return Object.fromEntries(cells.map((cell, i) => [headers[i], cell]));
+    const delimiter = text.includes('\t') ? '\t' : ',';
+
+    const result = Papa.parse(text, {
+      header: true,
+      delimiter: delimiter,
+      skipEmptyLines: true,
+      quoteChar: '"',
+      escapeChar: '"',
+      dynamicTyping: false,
     });
 
-    // 🔍 Debug logs
+    const { data: rows, meta: { fields: headers = [] } = {}, errors } = result;
+
+    if (errors.length) {
+      console.warn('⚠️ PapaParse errors:', errors);
+    }
+
+    console.log('✅ Detected delimiter:', delimiter === '\t' ? 'Tab' : 'Comma');
     console.log('Parsed headers:', headers);
     console.log('Parsed rows:', rows);
 

@@ -5,3 +5,5 @@ export { default as TopStoppageLocations } from './TopStoppageLocations';
 export { default as StoppageBubblePlot } from './StoppageBubblePlot';
 export { default as ZoneKPIs } from './ZoneKPIs';
 export { default as AlertTypeDistribution } from './AlertTypeDistribution';
+export { default as ModernDataTable } from './ModernDataTable';
+export { default as ModernDataTable1 } from './ModernDataTable1';
