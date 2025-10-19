@@ -1,5 +1,27 @@
 // src/components/RouteDeviationHeatmap.jsx
 import React from 'react';
+import {
+  Chart as ChartJS,
+  LinearScale,
+  CategoryScale,
+  PointElement,
+  LineElement,
+  BarElement,
+  Tooltip,
+  Legend,
+  Title
+} from 'chart.js';
+
+ChartJS.register(
+  LinearScale,
+  CategoryScale,
+  PointElement,
+  LineElement,
+  BarElement,
+  Tooltip,
+  Legend,
+  Title
+);
 
 const RouteDeviationHeatmap = ({ data }) => {
   if (!data || data.length === 0) return <div className="text-gray-500">No data available</div>;

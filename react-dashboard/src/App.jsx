@@ -49,11 +49,11 @@ export default function App() {
     };
   }, [transformer, filteredData]);
 
-  useEffect(() => {
-    console.log('🔄 Transformed data:', transformedData);
-    console.log('🔍 Filtered data:', filteredData);
-    console.log('📊 Module data:', moduleData);
-  }, [transformedData, filteredData, moduleData]);
+  //useEffect(() => {
+    //console.log('🔄 Transformed data:', transformedData);
+    //console.log('🔍 Filtered data:', filteredData);
+    //console.log('📊 Module data:', moduleData);
+  //}, [transformedData, filteredData, moduleData]);
 
   useEffect(() => {
     if (rawData) {
