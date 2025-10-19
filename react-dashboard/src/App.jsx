@@ -15,6 +15,7 @@ import DataTransformer from './utils/DataTransformer';
 import { createPivot } from './utils/pivotUtils';
 import { applyGlobalFilter } from './utils/filterUtils';
 import { applyRawTableGlobalFilter } from './utils/filterUtils';
+import { exportDashboardToExcel } from './utils/exportDashboardToExcel';
 
 export default function App() {
   const [rawData, setRawData] = useState(null);
@@ -145,12 +146,46 @@ const routeDeviationData = useMemo(() =>
       <header className="bg-white shadow">
         <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
           <h1 className="text-2xl font-bold">Vehicle Analytics Dashboard</h1>
-          <button
-            onClick={() => setRawData(null)}
-            className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300"
-          >
-            Upload New File
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setRawData(null)}
+              className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300"
+            >
+              Upload New File
+            </button>
+            <button
+              onClick={() =>
+                exportDashboardToExcel(
+                  {
+                    'Raw Table': filteredRawTableData,
+                    'Route Deviations': routeDeviationData,
+                    'Stoppage Bubbles': moduleData?.bubbleData,
+                    'Top Stoppages': moduleData?.topStoppages,
+                    'Zone KPIs': Object.entries(moduleData?.zoneKPIs || {}).map(([zone, metrics]) => ({
+                      Zone: zone,
+                      ...metrics
+                    })),
+                    'Alert Distribution': moduleData?.alertDistribution
+                  },
+                  'FullDashboardExport',
+                  {
+                    includeTimestamp: true,
+                    columnMap: {
+                      'Zone KPIs': {
+                        Zone: 'Zone',
+                        totalTrips: 'Total Trips',
+                        delayedTrips: 'Delayed',
+                        onTimeTrips: 'On Time'
+                      }
+                    }
+                  }
+                )
+              }
+              className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+            >
+              Export Entire Dashboard
+            </button>
+          </div>
         </div>
       </header>
 

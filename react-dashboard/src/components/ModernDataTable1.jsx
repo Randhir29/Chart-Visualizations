@@ -48,10 +48,10 @@ const ModernDataTable1 = ({ data }) => {
 
   const expandedDetails = [
     'Transporter',
-    'Invoice No',
-    'Load No',
-    'Trip Status',
-    'Driver Name',
+    //'Invoice No',
+    //'Load No',
+    //'Trip Status',
+    //'Driver Name',
     'From Datetime',
     'Start Location',
     'Speed (Km/Hr)',
@@ -60,8 +60,8 @@ const ModernDataTable1 = ({ data }) => {
     'Speed (Km/Hr)2',
     'Distance',
     'Duration (HH:MM)',
-    'Remark',
-    'Action Performed',
+    //'Remark',
+    //'Action Performed',
     'Stoppage Latitude',
     'Stoppage Longitude',
     'Stoppage Count'
@@ -132,7 +132,7 @@ const ModernDataTable1 = ({ data }) => {
                 ))}
               </tr>
 
-              {expandedRowId === row.id && (
+              {/* {expandedRowId === row.id && (
                 <tr className="bg-gray-50">
                   <td colSpan={columns.length} className="px-4 py-2 border">
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm text-gray-700">
@@ -144,7 +144,63 @@ const ModernDataTable1 = ({ data }) => {
                     </div>
                   </td>
                 </tr>
+              )} */}
+
+              {/* {expandedRowId === row.id && (
+                <tr className="bg-gray-50">
+                  <td colSpan={columns.length} className="px-4 py-2 border">
+                    <table className="w-full table-auto border border-gray-300 text-sm">
+                      <thead className="bg-gray-100">
+                        <tr>
+                          <th className="px-2 py-1 border">Field</th>
+                          <th className="px-2 py-1 border">Value</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {expandedDetails.map(key => (
+                          <tr key={key}>
+                            <td className="px-2 py-1 border font-medium text-gray-700">{key}</td>
+                            <td className="px-2 py-1 border text-gray-600">{row.original[key] ?? '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </td>
+                </tr>
+              )} */}
+
+
+              {/* Expanded transposed sub-table */}
+              {expandedRowId === row.id && (
+                <tr className="bg-gray-50">
+                  <td colSpan={columns.length} className="px-4 py-2 border">
+                    <div className="overflow-x-auto">
+                      <table className="w-full table-auto border border-gray-300 text-sm">
+                        <thead className="bg-gray-100">
+                          <tr>
+                            {expandedDetails.map(key => (
+                              <th key={key} className="px-2 py-1 border text-left">
+                                {key}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr>
+                            {expandedDetails.map(key => (
+                              <td key={key} className="px-2 py-1 border text-gray-700">
+                                {row.original[key] ?? '—'}
+                              </td>
+                            ))}
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </td>
+                </tr>
               )}
+
+
             </React.Fragment>
           ))}
         </tbody>

@@ -12,13 +12,16 @@
   "dependencies": {
     "@tanstack/react-table": "^8.21.3",
     "chart.js": "^4.5.1",
+    "file-saver": "^2.0.5",
     "lodash": "^4.17.21",
     "lucide-react": "^0.546.0",
     "papaparse": "^5.5.3",
     "react": "^19.1.1",
     "react-chartjs-2": "^5.3.0",
     "react-dom": "^19.1.1",
-    "tabulator-tables": "^6.3.1"
+    "react-export-table-to-excel": "^1.0.6",
+    "tabulator-tables": "^6.3.1",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@eslint/js": "^9.36.0",
